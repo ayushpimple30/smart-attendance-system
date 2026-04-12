@@ -21,8 +21,12 @@ export default function AttendanceHistory() {
   const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>([]);
   const [dateFilter, setDateFilter] = useState("");
 
-  const getAllAttendanceQuery = trpc.attendance.getAllAttendance.useQuery({});
-  const exportCSVQuery = trpc.attendance.exportAttendanceCSV.useQuery({});
+  const getAllAttendanceQuery = trpc.attendance.getAllAttendance.useQuery({}, {
+    retry: false,
+  });
+  const exportCSVQuery = trpc.attendance.exportAttendanceCSV.useQuery({}, {
+    retry: false,
+  });
 
   useEffect(() => {
     if (getAllAttendanceQuery.data) {
@@ -143,7 +147,16 @@ export default function AttendanceHistory() {
 
       {/* Records Table */}
       <Card className="p-6">
-        {filteredRecords.length > 0 ? (
+        {getAllAttendanceQuery.error ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground mb-4">
+              Database not initialized. Please ensure the backend is properly set up with database tables.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Once you register students and start attendance sessions, records will appear here.
+            </p>
+          </div>
+        ) : filteredRecords.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

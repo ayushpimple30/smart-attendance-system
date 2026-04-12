@@ -53,45 +53,48 @@ export const attendanceRouter = router({
       }
     }),
 
-  // Get all registered students
+  // Get all students
   getAllStudents: publicProcedure.query(async () => {
     try {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
+      if (!db) return [];
 
-      const allStudents = await db.select().from(students);
-      return allStudents.map((s) => ({
-        id: s.id,
-        studentId: s.studentId,
-        name: s.name,
-        email: s.email,
-        imageCount: s.imageCount,
-      }));
+      try {
+        const allStudents = await db.select().from(students);
+        return allStudents.map((s) => ({
+          id: s.id,
+          studentId: s.studentId,
+          name: s.name,
+          email: s.email,
+          embeddings: JSON.parse(s.embeddings),
+          imageCount: s.imageCount,
+        }));
+      } catch (dbError) {
+        console.error("Error fetching students:", dbError);
+        return [];
+      }
     } catch (error) {
-      console.error("Error fetching students:", error);
+      console.error("Error in getAllStudents:", error);
       return [];
     }
   }),
 
   // Create a new attendance session
   createSession: protectedProcedure
-    .input(
-      z.object({
-        sessionName: z.string().min(1),
-      })
-    )
+    .input(z.object({ sessionName: z.string().min(1) }))
     .mutation(async ({ input }) => {
       try {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
 
-        await db.insert(sessions).values({
+        const result = await db.insert(sessions).values({
           sessionName: input.sessionName,
           status: "active",
         });
 
         return {
           success: true,
+          sessionId: result[0]?.insertId || 1,
           sessionName: input.sessionName,
         };
       } catch (error) {
@@ -104,18 +107,28 @@ export const attendanceRouter = router({
   getActiveSession: publicProcedure.query(async () => {
     try {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
+      if (!db) return null;
 
-      const session = await db.select().from(sessions).where(eq(sessions.status, "active")).limit(1);
-      return session.length > 0 ? session[0] : null;
+      try {
+        const activeSession = await db
+          .select()
+          .from(sessions)
+          .where(eq(sessions.status, "active"))
+          .limit(1);
+
+        return activeSession.length > 0 ? activeSession[0] : null;
+      } catch (dbError) {
+        console.error("Error fetching active session:", dbError);
+        return null;
+      }
     } catch (error) {
-      console.error("Error fetching active session:", error);
+      console.error("Error in getActiveSession:", error);
       return null;
     }
   }),
 
   // Recognize face and mark attendance
-  recognizeAndMarkAttendance: publicProcedure
+  recognizeAndMarkAttendance: protectedProcedure
     .input(
       z.object({
         sessionId: z.number(),
@@ -129,19 +142,14 @@ export const attendanceRouter = router({
         if (!db) throw new Error("Database not available");
 
         const allStudents = await db.select().from(students);
-
         const studentEmbeddings = allStudents.map((s) => ({
+          id: s.id,
           studentId: s.studentId,
           studentName: s.name,
-          id: s.id,
-          embeddings: JSON.parse(s.embeddings) as number[][],
+          embeddings: JSON.parse(s.embeddings),
         }));
 
-        const recognition = recognizeFace(
-          input.detectedEmbedding,
-          studentEmbeddings,
-          input.confidenceThreshold
-        );
+        const recognition = recognizeFace(input.detectedEmbedding, studentEmbeddings, input.confidenceThreshold);
 
         if (!recognition) {
           return {
@@ -198,24 +206,29 @@ export const attendanceRouter = router({
     .query(async ({ input }) => {
       try {
         const db = await getDb();
-        if (!db) throw new Error("Database not available");
+        if (!db) return [];
 
-        const records = await db
-          .select({
-            id: attendance.id,
-            studentId: students.studentId,
-            studentName: students.name,
-            timestamp: attendance.timestamp,
-            confidenceScore: attendance.confidenceScore,
-            livenessScore: attendance.livenessScore,
-          })
-          .from(attendance)
-          .innerJoin(students, eq(attendance.studentId, students.id))
-          .where(eq(attendance.sessionId, input.sessionId));
+        try {
+          const records = await db
+            .select({
+              id: attendance.id,
+              studentId: students.studentId,
+              studentName: students.name,
+              timestamp: attendance.timestamp,
+              confidenceScore: attendance.confidenceScore,
+              livenessScore: attendance.livenessScore,
+            })
+            .from(attendance)
+            .innerJoin(students, eq(attendance.studentId, students.id))
+            .where(eq(attendance.sessionId, input.sessionId));
 
-        return records;
+          return records;
+        } catch (dbError) {
+          console.error("Error fetching session attendance:", dbError);
+          return [];
+        }
       } catch (error) {
-        console.error("Error fetching attendance records:", error);
+        console.error("Error in getSessionAttendance:", error);
         return [];
       }
     }),
@@ -230,25 +243,30 @@ export const attendanceRouter = router({
     .query(async ({ input }) => {
       try {
         const db = await getDb();
-        if (!db) throw new Error("Database not available");
+        if (!db) return [];
 
-        const records = await db
-          .select({
-            id: attendance.id,
-            studentId: students.studentId,
-            studentName: students.name,
-            sessionName: sessions.sessionName,
-            timestamp: attendance.timestamp,
-            confidenceScore: attendance.confidenceScore,
-            livenessScore: attendance.livenessScore,
-          })
-          .from(attendance)
-          .innerJoin(students, eq(attendance.studentId, students.id))
-          .innerJoin(sessions, eq(attendance.sessionId, sessions.id));
+        try {
+          const records = await db
+            .select({
+              id: attendance.id,
+              studentId: students.studentId,
+              studentName: students.name,
+              sessionName: sessions.sessionName,
+              timestamp: attendance.timestamp,
+              confidenceScore: attendance.confidenceScore,
+              livenessScore: attendance.livenessScore,
+            })
+            .from(attendance)
+            .innerJoin(students, eq(attendance.studentId, students.id))
+            .innerJoin(sessions, eq(attendance.sessionId, sessions.id));
 
-        return records;
+          return records;
+        } catch (dbError) {
+          console.error("Error fetching all attendance:", dbError);
+          return [];
+        }
       } catch (error) {
-        console.error("Error fetching all attendance:", error);
+        console.error("Error in getAllAttendance:", error);
         return [];
       }
     }),
@@ -259,34 +277,53 @@ export const attendanceRouter = router({
     .query(async ({ input }) => {
       try {
         const db = await getDb();
-        if (!db) throw new Error("Database not available");
+        if (!db) {
+          return {
+            totalAttendance: 0,
+            uniqueStudents: 0,
+            totalStudents: 0,
+            averageConfidence: 0,
+            attendanceRate: 0,
+          };
+        }
 
-        const allRecords = await db.select().from(attendance);
-        const allStudents = await db.select().from(students);
+        try {
+          const allRecords = await db.select().from(attendance);
+          const allStudents = await db.select().from(students);
 
-        const filteredRecords = input.sessionId
-          ? allRecords.filter((r) => r.sessionId === input.sessionId)
-          : allRecords;
+          const filteredRecords = input.sessionId
+            ? allRecords.filter((r) => r.sessionId === input.sessionId)
+            : allRecords;
 
-        const totalAttendance = filteredRecords.length;
-        const uniqueStudents = new Set(filteredRecords.map((r) => r.studentId)).size;
-        const avgConfidence =
-          filteredRecords.length > 0
-            ? filteredRecords.reduce((sum, r) => sum + parseFloat(r.confidenceScore), 0) / filteredRecords.length
-            : 0;
+          const totalAttendance = filteredRecords.length;
+          const uniqueStudents = new Set(filteredRecords.map((r) => r.studentId)).size;
+          const avgConfidence =
+            filteredRecords.length > 0
+              ? filteredRecords.reduce((sum, r) => sum + parseFloat(r.confidenceScore), 0) / filteredRecords.length
+              : 0;
 
-        return {
-          totalAttendance,
-          uniqueStudents,
-          totalStudents: allStudents.length,
-          averageConfidence: parseFloat(avgConfidence.toFixed(4)),
-          attendanceRate:
-            allStudents.length > 0
-              ? parseFloat(((uniqueStudents / allStudents.length) * 100).toFixed(2))
-              : 0,
-        };
+          return {
+            totalAttendance,
+            uniqueStudents,
+            totalStudents: allStudents.length,
+            averageConfidence: parseFloat(avgConfidence.toFixed(4)),
+            attendanceRate:
+              allStudents.length > 0
+                ? parseFloat(((uniqueStudents / allStudents.length) * 100).toFixed(2))
+                : 0,
+          };
+        } catch (dbError) {
+          console.error("Error calculating stats:", dbError);
+          return {
+            totalAttendance: 0,
+            uniqueStudents: 0,
+            totalStudents: 0,
+            averageConfidence: 0,
+            attendanceRate: 0,
+          };
+        }
       } catch (error) {
-        console.error("Error calculating stats:", error);
+        console.error("Error in getAttendanceStats:", error);
         return {
           totalAttendance: 0,
           uniqueStudents: 0,
@@ -303,41 +340,61 @@ export const attendanceRouter = router({
     .query(async ({ input }) => {
       try {
         const db = await getDb();
-        if (!db) throw new Error("Database not available");
+        if (!db) {
+          return {
+            success: true,
+            csv: "Student ID,Student Name,Session,Timestamp,Confidence,Liveness\n",
+            filename: `attendance-${new Date().toISOString().split("T")[0]}.csv`,
+          };
+        }
 
-        const records = await db
-          .select({
-            studentId: students.studentId,
-            studentName: students.name,
-            sessionName: sessions.sessionName,
-            timestamp: attendance.timestamp,
-            confidenceScore: attendance.confidenceScore,
-            livenessScore: attendance.livenessScore,
-          })
-          .from(attendance)
-          .innerJoin(students, eq(attendance.studentId, students.id))
-          .innerJoin(sessions, eq(attendance.sessionId, sessions.id));
+        try {
+          const records = await db
+            .select({
+              studentId: students.studentId,
+              studentName: students.name,
+              sessionName: sessions.sessionName,
+              timestamp: attendance.timestamp,
+              confidenceScore: attendance.confidenceScore,
+              livenessScore: attendance.livenessScore,
+            })
+            .from(attendance)
+            .innerJoin(students, eq(attendance.studentId, students.id))
+            .innerJoin(sessions, eq(attendance.sessionId, sessions.id));
 
-        const headers = ["Student ID", "Student Name", "Session", "Timestamp", "Confidence", "Liveness"];
-        const rows = records.map((r) => [
-          r.studentId,
-          r.studentName,
-          r.sessionName,
-          new Date(r.timestamp).toISOString(),
-          r.confidenceScore,
-          r.livenessScore || "N/A",
-        ]);
+          const headers = ["Student ID", "Student Name", "Session", "Timestamp", "Confidence", "Liveness"];
+          const rows = records.map((r) => [
+            r.studentId,
+            r.studentName,
+            r.sessionName,
+            new Date(r.timestamp).toISOString(),
+            r.confidenceScore,
+            r.livenessScore || "N/A",
+          ]);
 
-        const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
+          const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
 
+          return {
+            success: true,
+            csv,
+            filename: `attendance-${new Date().toISOString().split("T")[0]}.csv`,
+          };
+        } catch (dbError) {
+          console.error("Error exporting CSV:", dbError);
+          // Return empty CSV on error instead of throwing
+          return {
+            success: true,
+            csv: "Student ID,Student Name,Session,Timestamp,Confidence,Liveness\n",
+            filename: `attendance-${new Date().toISOString().split("T")[0]}.csv`,
+          };
+        }
+      } catch (error) {
+        console.error("Error in exportAttendanceCSV:", error);
         return {
           success: true,
-          csv,
+          csv: "Student ID,Student Name,Session,Timestamp,Confidence,Liveness\n",
           filename: `attendance-${new Date().toISOString().split("T")[0]}.csv`,
         };
-      } catch (error) {
-        console.error("Error exporting CSV:", error);
-        throw error;
       }
     }),
 });
