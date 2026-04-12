@@ -25,4 +25,52 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Students table - stores registered student information
+ */
+export const students = mysqlTable("students", {
+  id: int("id").autoincrement().primaryKey(),
+  studentId: varchar("studentId", { length: 64 }).notNull().unique(), // Unique student identifier
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }),
+  embeddings: text("embeddings").notNull(), // JSON array of face embeddings
+  imageCount: int("imageCount").default(0).notNull(), // Number of registered face images
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Student = typeof students.$inferSelect;
+export type InsertStudent = typeof students.$inferInsert;
+
+/**
+ * Sessions table - stores attendance session information
+ */
+export const sessions = mysqlTable("sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionName: varchar("sessionName", { length: 255 }).notNull(),
+  startTime: timestamp("startTime").defaultNow().notNull(),
+  endTime: timestamp("endTime"),
+  status: mysqlEnum("status", ["active", "completed", "paused"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Session = typeof sessions.$inferSelect;
+export type InsertSession = typeof sessions.$inferInsert;
+
+/**
+ * Attendance table - stores individual attendance records
+ */
+export const attendance = mysqlTable("attendance", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull().references(() => sessions.id),
+  studentId: int("studentId").notNull().references(() => students.id),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  confidenceScore: varchar("confidenceScore", { length: 10 }).notNull(), // Stored as string for precision
+  livenessScore: varchar("livenessScore", { length: 10 }), // Blink/motion detection score
+  faceBoundingBox: text("faceBoundingBox"), // JSON: {x, y, width, height}
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Attendance = typeof attendance.$inferSelect;
+export type InsertAttendance = typeof attendance.$inferInsert;

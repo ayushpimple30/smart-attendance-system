@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, InsertStudent, InsertSession, InsertAttendance, students, sessions, attendance } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,56 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+/**
+ * Student queries
+ */
+export async function createStudent(data: InsertStudent) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(students).values(data);
+  return result;
+}
+
+export async function getStudentByStudentId(studentId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(students).where(eq(students.studentId, studentId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getAllStudents() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.select().from(students);
+}
+
+/**
+ * Session queries
+ */
+export async function createSession(data: InsertSession) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.insert(sessions).values(data);
+}
+
+export async function getActiveSession() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(sessions).where(eq(sessions.status, "active")).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Attendance queries
+ */
+export async function recordAttendance(data: InsertAttendance) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.insert(attendance).values(data);
+}
+
+export async function getAttendanceRecords(sessionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.select().from(attendance).where(eq(attendance.sessionId, sessionId));
+}
