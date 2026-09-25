@@ -126,6 +126,4 @@ Open **http://localhost:3000**
 
 Fork → branch → commit → PR. Run `pnpm test` and `pnpm check` before submitting.
 
-## 📄 License
 
-MIT
